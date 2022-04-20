@@ -1,7 +1,5 @@
 package com.example.trace.hellotrace;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import org.junit.jupiter.api.Test;
 
 import com.example.trace.TraceStatus;
