@@ -1,6 +1,11 @@
 package com.example.trace.template;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.example.trace.template.code.AbstractTemplate;
+import com.example.trace.template.code.SubClassLogic1;
+import com.example.trace.template.code.SubClassLogic2;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,5 +36,15 @@ public class TemplateMethodTest {
         final long endTime = System.currentTimeMillis();
         final long resultTime = endTime - startTime;
         log.info("resultTime = {}", resultTime);
+    }
+
+    @DisplayName("템플릿 메서드 패턴을 적용")
+    @Test
+    void templateMethodV1() {
+        AbstractTemplate template1 = new SubClassLogic1();
+        template1.execute();
+
+        AbstractTemplate template2 = new SubClassLogic2();
+        template2.execute();
     }
 }
