@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.example.trace.strategy.code.strategy.ContextV1;
+import com.example.trace.strategy.code.strategy.Strategy;
 import com.example.trace.strategy.code.strategy.StrategyLogic1;
 import com.example.trace.strategy.code.strategy.StrategyLogic2;
 
@@ -47,6 +48,60 @@ public class ContextV1Test {
 
         StrategyLogic2 strategyLogic2 = new StrategyLogic2();
         ContextV1 context2 = new ContextV1(strategyLogic2);
+        context2.execute();
+    }
+
+    @DisplayName("내부 익명 클래스 사용")
+    @Test
+    void strategy2() {
+        final Strategy strategyLogic1 = new Strategy() {
+            @Override
+            public void call() {
+                log.info("비즈니스 로직 1 실행");
+            }
+        };
+        ContextV1 context1 = new ContextV1(strategyLogic1);
+        log.info("strategyLogic1={}", strategyLogic1.getClass());
+        context1.execute();
+
+        final Strategy strategyLogic2 = new Strategy() {
+            @Override
+            public void call() {
+                log.info("비즈니스 로직 2 실행");
+            }
+        };
+        ContextV1 context2 = new ContextV1(strategyLogic2);
+        log.info("strategyLogic2={}", strategyLogic2.getClass());
+        context2.execute();
+    }
+
+    @DisplayName("내부 익명 클래스 사용 - 구현체를 바로")
+    @Test
+    void strategy3() {
+        ContextV1 context1 = new ContextV1(new Strategy() {
+            @Override
+            public void call() {
+                log.info("비즈니스 로직 1 실행");
+            }
+        });
+        context1.execute();
+
+        ContextV1 context2 = new ContextV1(new Strategy() {
+            @Override
+            public void call() {
+                log.info("비즈니스 로직 2 실행");
+            }
+        });
+        context2.execute();
+    }
+
+    @DisplayName("내부 익명 클래스 사용 - 람다")
+    @Test
+    void strategy4() {
+        ContextV1 context1 = new ContextV1(() -> log.info("비즈니스 로직 1 실행"));
+        context1.execute();
+
+        ContextV1 context2 = new ContextV1(() -> log.info("비즈니스 로직 2 실행"));
         context2.execute();
     }
 }

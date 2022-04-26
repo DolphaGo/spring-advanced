@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ContextV1 {
 
-    private Strategy strategy;
+    private final Strategy strategy;
 
     public ContextV1(final Strategy strategy) {
         this.strategy = strategy;
