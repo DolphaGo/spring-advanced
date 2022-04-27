@@ -3,6 +3,7 @@ package hello.proxy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import hello.proxy.pureproxy.code.CacheProxy;
 import hello.proxy.pureproxy.code.ProxyPatternClient;
 import hello.proxy.pureproxy.code.RealSubject;
 
@@ -13,6 +14,17 @@ public class ProxyPatternTest {
     void noProxyTest() {
         final RealSubject realSubject = new RealSubject();
         final ProxyPatternClient client = new ProxyPatternClient(realSubject);
+        client.execute();
+        client.execute();
+        client.execute();
+    }
+
+    @DisplayName("캐시 프록시 적용한 테스트")
+    @Test
+    void cacheProxyTest() {
+        final RealSubject realSubject = new RealSubject();
+        final CacheProxy cacheProxy = new CacheProxy(realSubject);
+        final ProxyPatternClient client = new ProxyPatternClient(cacheProxy);
         client.execute();
         client.execute();
         client.execute();
