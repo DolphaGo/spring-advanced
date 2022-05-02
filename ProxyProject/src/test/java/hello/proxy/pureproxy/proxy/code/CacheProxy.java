@@ -1,10 +1,9 @@
-package hello.proxy.pureproxy.code;
+package hello.proxy.pureproxy.proxy.code;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class CacheProxy implements Subject {
-
     private Subject target; // 실제 객체 (프록시 입장에서 호출해야 하는 객체)
     private String cacheValue;
 
