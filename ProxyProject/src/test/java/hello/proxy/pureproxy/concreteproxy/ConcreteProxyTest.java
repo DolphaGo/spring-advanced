@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import hello.proxy.pureproxy.concreteproxy.code.ConcreteClient;
 import hello.proxy.pureproxy.concreteproxy.code.ConcreteLogic;
+import hello.proxy.pureproxy.concreteproxy.code.TimeProxy;
 
 public class ConcreteProxyTest {
 
@@ -13,6 +14,15 @@ public class ConcreteProxyTest {
     void noProxy() {
         final ConcreteLogic concreteLogic = new ConcreteLogic();
         final ConcreteClient client = new ConcreteClient(concreteLogic);
+        client.execute();
+    }
+
+    @DisplayName("TimeProxy 추가")
+    @Test
+    void addProxy() {
+        final ConcreteLogic concreteLogic = new ConcreteLogic();
+        final TimeProxy timeProxy = new TimeProxy(concreteLogic);
+        final ConcreteClient client = new ConcreteClient(timeProxy);
         client.execute();
     }
 }
