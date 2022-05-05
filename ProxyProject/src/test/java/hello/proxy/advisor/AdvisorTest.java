@@ -9,6 +9,7 @@ import org.springframework.aop.MethodMatcher;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
 
 import hello.proxy.common.advice.TimeAdvice;
 import hello.proxy.common.service.ServiceInterface;
@@ -37,6 +38,23 @@ public class AdvisorTest {
         final ServiceInterface target = new ServiceInterfaceImpl();
         final ProxyFactory proxyFactory = new ProxyFactory(target);
         final DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(new MyPointcut(), new TimeAdvice());
+        proxyFactory.addAdvisor(advisor);
+
+        final ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+        proxy.save();
+        proxy.find();
+    }
+
+    @DisplayName("스프링이 제공하는 포인트컷")
+    @Test
+    void advisorTest3() {
+        final ServiceInterface target = new ServiceInterfaceImpl();
+        final ProxyFactory proxyFactory = new ProxyFactory(target);
+        final NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedNames("save");
+
+        final DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, new TimeAdvice());
         proxyFactory.addAdvisor(advisor);
 
         final ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
