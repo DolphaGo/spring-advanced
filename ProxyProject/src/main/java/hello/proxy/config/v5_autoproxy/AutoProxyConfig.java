@@ -1,8 +1,8 @@
 package hello.proxy.config.v5_autoproxy;
 
 import org.springframework.aop.Advisor;
+import org.springframework.aop.aspectj.AspectJExpressionPointcut;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
-import org.springframework.aop.support.NameMatchMethodPointcut;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -20,15 +20,28 @@ public class AutoProxyConfig {
      * 자동 프록시 생성기가 이미 스프링에 자동으로 등록이 되어있으니, 그 BeanPostProcssor이 어드바이저를 찾는다고 했다.
      * 따라서 어드바이저만 등록해주면 끝이다.
      */
+//    @Bean
+//    public Advisor advisor1(final LogTrace logTrace) {
+//        // pointcut
+//        final NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+//        pointcut.setMappedNames("request*", "order*", "save*");
+//
+//        // advice
+//        final LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+//
+//        return new DefaultPointcutAdvisor(pointcut, advice);
+//    }
+
     @Bean
-    public Advisor getAdvisor1(final LogTrace logTrace) {
+    public Advisor advisor2(final LogTrace logTrace) {
         // pointcut
-        final NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
-        pointcut.setMappedNames("request*", "order*", "save*");
+        final AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+        pointcut.setExpression("execution(* hello.proxy.app..*(..)) && !execution(* hello.proxy.app..noLog(..))");
 
         // advice
         final LogTraceAdvice advice = new LogTraceAdvice(logTrace);
 
         return new DefaultPointcutAdvisor(pointcut, advice);
     }
+
 }
