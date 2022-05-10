@@ -2,6 +2,7 @@
   - [예제 프로젝트 작성](#예제-프로젝트-작성)
   - [스프링 AOP 구현1 - 시작](#스프링-aop-구현1---시작)
   - [스프링 AOP 구현2 - 포인트컷 분리](#스프링-aop-구현2---포인트컷-분리)
+  - [스프링 AOP 구현3 - 어드바이스 추가](#스프링-aop-구현3---어드바이스-추가)
 
 ---
 
@@ -221,3 +222,151 @@ public class AspectV2 {
 - `private`, `public` 같은 접근 제어자는 내부에서만 사용하면 private를 사용해도 되지만, 다른 애스펙트에서 참고하려면 public을 사용하자.
 
 결과적으로 `AspectV1`과 같은 기능을 수행한다. 이렇게 분리하면 하나의 포인트컷 표현식을 여러 어드바이스에서 함께 사용 가능하다.
+
+## 스프링 AOP 구현3 - 어드바이스 추가
+
+- 앞서 로그를 출력하는 기능에 추가로 트랜잭션을 적용하는 코드도 추가해본다.
+- 여기서 진짜 트랜잭션을 실행하는 것은 아니고, 기능이 동작하는 것처럼 로그만 남겨보려 한다.
+
+> 일반적인 트랜잭션 기능 동작 과정
+
+- 핵심 로직 실행 직전에 트랜잭션을 시작
+- 핵심 로직 실행
+- 핵심 로직 실행에 문제가 없으면 커밋
+- 핵심 로직 실행에 예외가 발생하면 롤백
+
+```java
+@Slf4j
+@Aspect
+public class AspectV3 {
+
+    // hello.aop.order 패키지와 하위 패키지
+    @Pointcut("execution(* hello.aop.order..*(..))")
+    private void allOrder() {} // 포인트컷 시그니처라고 합니다.
+
+    // 클래스 이름 패턴이 *Service 인 것(보통 트랜잭션은 비즈니스 로직 실행할 때 (서비스 계층) 실행하므로)
+    @Pointcut("execution(* *..*Service.*(..))")
+    private void allService() {}
+
+    @Around("allOrder()")
+    public Object doLog(ProceedingJoinPoint joinPoint) throws Throwable {
+        log.info("[log] {}", joinPoint.getSignature()); // join point signature
+        return joinPoint.proceed(); // 실제 타깃이 호출
+    }
+
+    // hello.aop.order 패키지와 하위 패키지 이면서, 동시에 클래스 이름 패턴이 *Service인 것
+    @Around("allOrder() && allService()")
+    public Object doTranscation(ProceedingJoinPoint joinPoint) throws Throwable {
+        try {
+            log.info("[트랜잭션 시작] {}", joinPoint.getSignature());
+            final Object result = joinPoint.proceed();
+            log.info("[트랜잭션 커밋] {}", joinPoint.getSignature());
+            return result;
+        } catch (Exception e) {
+            log.info("[트랜잭션 롤백] {}", joinPoint.getSignature());
+            throw e;
+        } finally {
+            log.info("[리소스 릴리즈] {}", joinPoint.getSignature());
+        }
+    }
+}
+```
+
+- `allOrder()` 포인트 컷은 `hello.aop.order` 패키지와 하위 패키지를 대상으로 한다.
+- `allService()` 포인트 컷은 타입 이름 패턴이 *Service 를 대상으로 하는데, 쉽게 이야기해서 `XxxService` 처럼 `Service`로 끝나는 것을 대상으로 한다. 물론 `*Servi*` 와 같은 패턴도 가능하다.
+- 여기서 타입 이름 패턴이라고 한 이유는, **클래스, 인터페이스에 모두 적용되기 때문이다.**
+
+**`@Around("allOrder() && allService()")`**
+
+- 포인트 컷은 위와 같이 조합할 수 있다.
+  - `&&(AND)`, `||(OR)`, `!(NOT)` 3가지 조합이 가능하다.
+- `hello.aop.order` 패키지와 하위 패키지이면서 타입 이름 패턴이 `*Service` 인 것을 대상으로 한다.
+- 결과적으로 `doTransaction()` 어드바이스는 `OrderService`에만 적용된다.
+- `doLog()` 어드바이스는 `OrderService`, `OrderRepository` 에 모두 적용된다.
+
+> 테스트 코드
+
+```java
+
+@Slf4j
+@SpringBootTest
+@Import(AspectV3.class)
+public class AopTest {
+
+    @Autowired
+    OrderService orderService;
+
+    @Autowired
+    OrderRepository orderRepository;
+
+    @Test
+    void aopInfo() {
+        log.info("isAopProxy, orderService={}", AopUtils.isAopProxy(orderService));
+        log.info("isAopProxy, orderRepository={}", AopUtils.isAopProxy(orderRepository));
+    }
+
+    @Test
+    void success() {
+        orderService.orderItem("itemA");
+    }
+
+    @Test
+    void exception() {
+        assertThatThrownBy(() -> orderService.orderItem("ex"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
+```
+
+- AopInfo 실행 결과
+
+```log
+2022-05-11 02:44:19.232  INFO 32277 --- [    Test worker] hello.aop.AopTest                        : isAopProxy, orderService=true
+2022-05-11 02:44:19.232  INFO 32277 --- [    Test worker] hello.aop.AopTest                        : isAopProxy, orderRepository=true
+```
+
+- success 실행 결과
+
+```log
+2022-05-11 02:44:19.201  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [log] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.202  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [트랜잭션 시작] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.214  INFO 32277 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 02:44:19.214  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [log] String hello.aop.order.OrderRepository.save(String)
+2022-05-11 02:44:19.220  INFO 32277 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 02:44:19.220  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [트랜잭션 커밋] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.221  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [리소스 릴리즈] void hello.aop.order.OrderService.orderItem(String)
+```
+
+- exception 실행 결과
+
+```java
+2022-05-11 02:44:19.280  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [log] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [트랜잭션 시작] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [log] String hello.aop.order.OrderRepository.save(String)
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [트랜잭션 롤백] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [리소스 릴리즈] void hello.aop.order.OrderService.orderItem(String)
+```
+
+![](/images/2022-05-11-02-50-33.png)
+
+- AOP 적용 전
+
+클라이언트 -> `orderService.orderItem()` -> `orderRepository.save()`
+
+- AOP 적용 후
+클라이언트 -> `[ doLog() -> doTransaction()]` -> `orderService.orderItem()` -> 
+`[ doLog() ]` -> `orderRepository.save()`
+
+---
+
+OrderService엔 2개의 어드바이스(`doLog(), doTransaction()`), OrderRepository에는 하나의 어드바이스(`doLog()`)가 적용된 것을 확인할 수 있다.
+
+
+실행 결과를 분석해보면 예외 상황에서는 트랜잭션 커밋 대신 **트랜잭션 롤백**이 호출되는 것을 확인할 수 있다.
+그런데 여기에서 로그를 남기는 순서가 `[ doLog() doTransaction() ]` 순서로 작동한다. 
+
+**만약 어드바이스가 적용되는 순서를 변경하고 싶으면 어떻게 하면 될까?** 예를 들어서 실행 시간을 측정해야 하는데 트랜잭션과 관련된 시간을 제외하고 측정하고 싶다면 `[ doTransaction() doLog() ]` 이렇게 트랜잭션 이후에 로그를 남겨야 할 것이다.
+
+그 전에 잠깐 포인트컷을 외부로 빼서 사용하는 방법을 먼저 알아보자.

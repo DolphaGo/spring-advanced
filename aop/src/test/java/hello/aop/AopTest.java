@@ -12,11 +12,12 @@ import hello.aop.order.OrderRepository;
 import hello.aop.order.OrderService;
 import hello.aop.order.aop.AspectV1;
 import hello.aop.order.aop.AspectV2;
+import hello.aop.order.aop.AspectV3;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @SpringBootTest
-@Import(AspectV2.class) // 빈으로 등록한다.
+@Import(AspectV3.class)
 public class AopTest {
 
     @Autowired
