@@ -5,6 +5,12 @@
   - [스프링 AOP 구현3 - 어드바이스 추가](#스프링-aop-구현3---어드바이스-추가)
   - [스프링 AOP 구현4 - 포인트컷 참조](#스프링-aop-구현4---포인트컷-참조)
   - [스프링 AOP 구현5 - 어드바이스 순서](#스프링-aop-구현5---어드바이스-순서)
+  - [스프링 AOP 구현6- 어드바이스 종류](#스프링-aop-구현6--어드바이스-종류)
+    - [@Before](#before)
+    - [@AfterReturning](#afterreturning)
+    - [@AfterThrowing](#afterthrowing)
+    - [@After](#after)
+    - [@Around](#around)
 
 ---
 
@@ -24,9 +30,9 @@ public class OrderService {
         this.orderRepository = orderRepository;
     }
 
-    public void orderItem(String itemId) {
+    public String orderItem(String itemId) {
         log.info("[orderService] 실행");
-        orderRepository.save(itemId);
+        return orderRepository.save(itemId);
     }
 }
 ```
@@ -580,3 +586,302 @@ public class AopTest {
 
 ![](/images/2022-05-11-03-10-13.png)
 
+
+## 스프링 AOP 구현6- 어드바이스 종류
+
+- 어드바이스는 앞서 살펴본 `@Around` 외에도 여러가지 종류가 있다.
+
+**어드바이스 종류**
+
+- `@Around` : 메서드 호출 전후에 수행, 가장 강력한 어드바이스, 조인 포인트 실행 여부 선택, 반환 값 변환, 예외 변환 등이 가능
+- `@Before` : 조인 포인트 실행 이전에 실행
+- `@AfterReturning` : 조인 포인트가 정상 완료후 실행
+- `@AfterThrowing` : 메서드가 예외를 던지는 경우 실행
+- `@After`: 조인 포인트가 정상 또는 예외에 관계 없이 실행(finally)
+
+```java
+@Slf4j
+@Aspect
+public class AspectV6Advice {
+
+    // hello.aop.order 패키지와 하위 패키지 이면서, 동시에 클래스 이름 패턴이 *Service인 것
+//    @Around("hello.aop.order.aop.PointCuts.orderAndService()")
+//    public Object doTranscation(ProceedingJoinPoint joinPoint) throws Throwable {
+//        try {
+//            // @Before
+//            log.info("[트랜잭션 시작] {}", joinPoint.getSignature());
+//            final Object result = joinPoint.proceed();
+//            // @AfterReturning
+//            log.info("[트랜잭션 커밋] {}", joinPoint.getSignature());
+//            return result;
+//        } catch (Exception e) {
+//            // @AfterThrowing
+//            log.info("[트랜잭션 롤백] {}", joinPoint.getSignature());
+//            throw e;
+//        } finally {
+//            // @After
+//            log.info("[리소스 릴리즈] {}", joinPoint.getSignature());
+//        }
+//    }
+
+//    @Before("hello.aop.order.aop.PointCuts.orderAndService()")
+//    public void doBefore() { // JoinPoint 라는 매개변수를 받지 않아도 된다.
+//        log.info("[Before] {}", "hello");
+//    }
+
+    @Before("hello.aop.order.aop.PointCuts.orderAndService()")
+    public void doBefore(JoinPoint joinPoint) { // Before는 joinPoint.proceed 처럼 따로 실행하지 않아도 실행해줍니다.
+        log.info("[Before] {}", joinPoint.getSignature());
+    }
+
+    @AfterReturning(value = "hello.aop.order.aop.PointCuts.orderAndService()", returning = "result")
+    public void doReturn(JoinPoint joinPoint, Object result) { // 매개변수의 result와 @AfterReturning에 정의한 result와 이름 매칭이 되어, 결과값을 받아올 수 있다.
+        // return을 쓸 수는 있지만, 리턴하지 않기 때문에 이 결과값을 바꿀 수가 없습니다.
+        log.info("[AfterReturning] {} return = {}", joinPoint.getSignature(), result);
+    }
+
+    @AfterThrowing(value = "hello.aop.order.aop.PointCuts.orderAndService()", throwing = "ex")
+    public void doThrowing(JoinPoint joinPoint, Exception ex) { // 매개변수의 result와 @AfterReturning에 정의한 result와 이름 매칭이 되어, 결과값을 받아올 수 있다.
+        log.info("[AfterThrowing] {}", joinPoint.getSignature(), ex);
+    }
+
+    @After("hello.aop.order.aop.PointCuts.orderAndService()")
+    public void doAfter(JoinPoint joinPoint) {
+        log.info("[doAfter] {} ", joinPoint.getSignature());
+    }
+}
+```
+
+> 테스트
+
+```java
+@Slf4j
+@SpringBootTest
+@Import({ AspectV6Advice.class })
+public class AopTest {
+
+    @Autowired
+    OrderService orderService;
+
+    @Autowired
+    OrderRepository orderRepository;
+
+    @Test
+    void aopInfo() {
+        log.info("isAopProxy, orderService={}", AopUtils.isAopProxy(orderService));
+        log.info("isAopProxy, orderRepository={}", AopUtils.isAopProxy(orderRepository));
+    }
+
+    @Test
+    void success() {
+        orderService.orderItem("itemA");
+    }
+
+    @Test
+    void exception() {
+        assertThatThrownBy(() -> orderService.orderItem("ex"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
+```
+
+> 실행 결과
+
+- success 실행 결과
+
+```log
+2022-05-11 03:30:34.376  INFO 42193 --- [    Test worker] hello.aop.order.aop.AspectV6Advice       : [Before] String hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:30:34.385  INFO 42193 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 03:30:34.385  INFO 42193 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 03:30:34.386  INFO 42193 --- [    Test worker] hello.aop.order.aop.AspectV6Advice       : [AfterReturning] String hello.aop.order.OrderService.orderItem(String) return = ok
+2022-05-11 03:30:34.386  INFO 42193 --- [    Test worker] hello.aop.order.aop.AspectV6Advice       : [doAfter] String hello.aop.order.OrderService.orderItem(String) 
+```
+
+- exception 실행결과
+
+```log
+2022-05-11 03:31:18.970  INFO 42351 --- [    Test worker] hello.aop.order.aop.AspectV6Advice       : [Before] String hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:31:18.970  INFO 42351 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 03:31:18.970  INFO 42351 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 03:31:18.975  INFO 42351 --- [    Test worker] hello.aop.order.aop.AspectV6Advice       : [AfterThrowing] String hello.aop.order.OrderService.orderItem(String)
+
+java.lang.IllegalStateException: 예외 발생!
+	at hello.aop.order.OrderRepository.save(OrderRepository.java:13) ~[main/:na]
+	at hello.aop.order.OrderService.orderItem(OrderService.java:18) ~[main/:na]
+```
+
+> ### 정리
+
+- 복잡해보이지만, 사실 `@Around`를 제외한 나머지 어드바이스들은 `@Around`가 할 수 있는 일의 일부만 제공할 뿐이다.
+- 따라서 `@Around` 어드바이스만 사용해도, 필요한 기능을 모두 수행할 수 있다.
+
+**참고 정보 획득**
+
+- 모든 어드바이스는 `org.aspectj.lang.JoinPoint`를 첫 번째 파라미터에 사용할 수 있다(생략 가능하다)
+- 단, `@Around`는 `ProceedingJoinPoint`를 사용해야 한다.
+
+참고로, `ProceedingJoinPoint`는 `org.aspectj.lang.JoinPoint` 의 하위 타입이다.
+
+> **JoinPoint 인터페이스의 주요 기능**
+
+- `getArgs()` : 메서드 인수를 반환
+- `getThis()` : 프록시 객체를 반환
+- `getTarget()` : 대상 객체를 반환
+- `getSignature()` : 조언되는 메서드에 대한 설명을 반환
+- `toString()` : 조언되는 방법에 대한 유용한 설명을 인쇄
+
+> **ProceedingJoinPoint 인터페이스의 주요 기능**
+
+- **`proceed()`: 다음 어드바이스나 타겟을 호출한다.**
+
+추가로 호출시 전달한 매개변수를 파라미터를 통해서도 전달 받을 수도 있는데, 이 부분은 뒤에서 설명한다.
+
+### @Before
+
+```java
+@Before("hello.aop.order.aop.PointCuts.orderAndService()")
+public void doBefore(JoinPoint joinPoint) { // Before는 joinPoint.proceed 처럼 따로 실행하지 않아도 실행해줍니다.
+    log.info("[Before] {}", joinPoint.getSignature());
+}
+```
+
+- 조인 포인트 실행 전에 실행된다.
+- `@Around`와 다르게 작업 흐름을 변경할 수 없다.
+- `@Around`는 `ProceedingJoinPoint.proceed()` 를 호출해야, 다음 대상이 호출된다.
+- 만약 호출하지 않으면 다음 대상이 호출되지 않는다.
+- 반면에, `@Before` 는 `ProceedingJoinPoint.proceed()` 자체를 사용하지 않는다.
+- 메서드 종료시 자동으로 다음 타겟이 호출된다.
+- 물론 예외가 발생하면, 다음 코드가 호출되지는 않는다.
+
+### @AfterReturning
+
+```java
+@AfterReturning(value = "hello.aop.order.aop.PointCuts.orderAndService()", returning = "result")
+public void doReturn(JoinPoint joinPoint, Object result) { // 매개변수의 result와 @AfterReturning에 정의한 result와 이름 매칭이 되어, 결과값을 받아올 수 있다.
+    // return을 쓸 수는 있지만, 리턴하지 않기 때문에 이 결과값을 바꿀 수가 없습니다.
+    log.info("[AfterReturning] {} return = {}", joinPoint.getSignature(), result);
+}
+```
+
+- 메서드 실행이 정상적으로 반환될 때 실행
+- `returning` 속성에 사용된 이름은 어드바이스 메서드의 매개변수 이름과 일치해야 한다.
+- `returning` 절에 지정된 타입의 값을 반환하는 메서드만 대상으로 실행한다. (부모 타입을 지정하면 모든 자식 타입은 인정된다.)
+
+```java
+@AfterReturning(value = "hello.aop.order.aop.PointCuts.allOrder()", returning = "result")
+public void doReturn(JoinPoint joinPoint, Integer result) {
+    // 여기서 result에 매핑될 수 있는 값이 없기 때문에, 이 메서드가 호출 자체가 안됩니다.
+    log.info("[AfterReturning - TypeTest] {} return = {}", joinPoint.getSignature(), result);
+}
+```
+
+- `@Around`와 다르게 반환되는 객체를 변경할 수 없다.
+  - 반환 객체를 변경하려면 `@Around`를 사용해야 한다. 참고로 반환 객체를 조작할 수는 있다.
+
+### @AfterThrowing
+
+```java
+@AfterThrowing(value = "hello.aop.order.aop.PointCuts.orderAndService()", throwing = "ex")
+public void doThrowing(JoinPoint joinPoint, Exception ex) { // 매개변수의 result와 @AfterReturning에 정의한 result와 이름 매칭이 되어, 결과값을 받아올 수 있다.
+    log.info("[AfterThrowing] {}", joinPoint.getSignature(), ex);
+}
+```
+
+- 메서드 실행이 예외를 던져서 종료될 때 실행
+- `throwing` 속성에 사용된 이름은 어드바이스 메서드의 매개변수 이름과 일치해야 한다.
+- `throwing` 절에 지정된 타입과 맞은 예외를 대상으로 실행한다.(부모 타입을 지정하면 모든 자식 타입은 인정된다.)
+
+### @After
+
+```java
+@After("hello.aop.order.aop.PointCuts.orderAndService()")
+public void doAfter(JoinPoint joinPoint) {
+    log.info("[After] {} ", joinPoint.getSignature());
+}
+```
+
+- 메서드 실행이 종료되면 실행된다(`finally`를 생각하면 된다.)
+- 정상 및 예외 반환 조건을 모두 처리한다.
+- 일반적으로 리소스를 해제하는 데 사용한다.
+
+### @Around
+
+```java
+@Around("hello.aop.order.aop.PointCuts.orderAndService()")
+public Object doTranscation(ProceedingJoinPoint joinPoint) throws Throwable {
+    try {
+        // @Before
+        log.info("[트랜잭션 시작] {}", joinPoint.getSignature());
+        final Object result = joinPoint.proceed();
+        // @AfterReturning
+        log.info("[트랜잭션 커밋] {}", joinPoint.getSignature());
+        return result;
+    } catch (Exception e) {
+        // @AfterThrowing
+        log.info("[트랜잭션 롤백] {}", joinPoint.getSignature());
+        throw e;
+    } finally {
+        // @After
+        log.info("[리소스 릴리즈] {}", joinPoint.getSignature());
+    }
+}
+```
+
+- 메서드 실행 주변에서 실행된다. 메서드 실행 전후에 작업을 수행한다.
+- 가장 강력한 어드바이스
+  - 조인 포인트 실행 여부 선택 : `joinPoint.proceed()`
+  - 전달 값 변환: `joinPoint.proceed(args[])`
+  - 반환 값 변환
+  - 예외 변환
+  - 트랜잭션처럼 `try~catch~finally` 모두 들어가는 구분 처리 가능
+- 어드바이스의 첫 번째 파라미터는 `ProceedingJoinPoint`를 사용해야 한다.
+- `proceed()` 를 통해 대상을 실행한다.
+- `proceed()` 를 여러번 실행할 수도 있음(재시도)
+
+![](/images/2022-05-11-04-14-31.png)
+
+**순서**
+
+- 스프링은 `5.2.7` 버전부터 `동일한 @Aspect` 안에서 동일한 조인포인트의 우선순위를 정했다.
+- 실행 순서: `@Around`, `@Before`, `@After`, `@AfterReturning`, `@AfterThrowing`
+- 어드바이스가 적용되는 순서는 이렇게 적용되지만, 호출 순서와 리턴 순서는 반대라는 점을 알아두자. (After의 의미와, `@After`가 가장 마지막인 것을 생각할 것)
+- **물론 `@Aspect` 안에 동일한 종류의 어드바이스가 2개 있으면 순서가 보장되지 않는다.** 이 경우 앞서 배운 것 처럼 `@Aspect`를 분리하고 `@Order` 를 적용하자.
+
+
+> **@Around 외에 다른 어드바이스가 존재하는 이유**
+
+- `@Around` 만 있어도 모든 기능을 수행할 수 있는데... 다른 어드바이스들이 존재하는 이유는 무엇일까?
+
+```java
+@Around("hello.aop.order.aop.Pointcuts.orderAndService()")
+public void doBefore(ProceedingJoinPoint joinPoint) {
+    log.info("[before] {}", joinPoint.getSignature());
+}
+```
+
+- 위 코드는 타겟을 호출하지 않는 문제가 있다.
+- 이 코드를 개발한 의도는 타겟 실행 전에 로그를 출력하는 것이다.
+- 그런데 **`@Around` 는 항상 `joinPoint.proceed()`를 호출해야한다.**
+- 만약 실수로 호출하지 않으면 치명적인 버그가 발생할 수 있다.
+
+이번엔 다음 코드를 보자.
+
+```java
+@Before("hello.aop.order.aop.Pointcuts.orderAndService()")
+public void doBefore(JoinPoint joinPoint) {
+    log.info("[before] {}", joinPoint.getSignature());
+}
+```
+
+- `@Before`는 `joinPoint.proceed()`를 호출하는 고민을 하지 않아도 된다. (프레임워크에서 자체적으로 proceed를 해주므로)
+
+**`@Around는` 가장 넓은 기능을 제공하는 것은 맞지만, 실수할 가능성이 있다. 반면에 `@Before`, `@Around` 같은 어드바이스는 기능은 적지만, 실수할 가능성이 낮고, 코드도 단순하다. 그리고 가장 중요한 점은 코드를 작성한 의도가 명확하게 드러난다는 점이다. `@Before` 라는 애노테이션을 보는 순간, 아 이 코드는 타겟 실행 전에 한정해서 어떤 일을 하는 코드구나 라는 것을 비교적 쉽게 알아차릴 수 있다.**
+
+> **좋은 설계는 제약이 있는 것이다.**
+
+- `@Around`만 있으면 되는데 왜, 이렇게 제약을 두는가?
+- 제약은 실수를 미연에 방지한다.
+  - 일종의 가이드 역할을 한다.
+- 만약 `@Around` 를 사용했는데, 중간에 다른 개발자가 해당 코드를 수정해서 호출하지 않았다면? 큰 장애가 발생할 것이다.
+- 처음부터 `@Before를` 사용했다면 이런 문제 자체가 발생하지 않는다.
+- 제약 덕분에 역할이 명확해지고, 다른 개발자도 이 코드를 보고 고민해야 하는 범위가 줄어들고 코드의 의도도 파악하기가 쉬워진다.
