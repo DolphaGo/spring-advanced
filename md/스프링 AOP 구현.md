@@ -4,6 +4,7 @@
   - [스프링 AOP 구현2 - 포인트컷 분리](#스프링-aop-구현2---포인트컷-분리)
   - [스프링 AOP 구현3 - 어드바이스 추가](#스프링-aop-구현3---어드바이스-추가)
   - [스프링 AOP 구현4 - 포인트컷 참조](#스프링-aop-구현4---포인트컷-참조)
+  - [스프링 AOP 구현5 - 어드바이스 순서](#스프링-aop-구현5---어드바이스-순서)
 
 ---
 
@@ -458,6 +459,124 @@ public class AopTest {
 }
 ```
 
+- `패키지명.클래스이름.포인트컷이름` 으로 사용할 수 있다.
 - 실행 결과는 V3과 같다.
 
+## 스프링 AOP 구현5 - 어드바이스 순서
+
+- **어드바이스는 기본적으로 순서를 보장하지 않는다.**
+- 순서를 지정하고 싶으면, `@Aspect` 적용 단위로 **`org.springframework.core.annotation.@Order`** 애노테이션을 적용해야 한다.
+- 문제는 이것을 **어드바이스 단위가 아니라 클래스 단위로 적용할 수 있다는 점**이다.
+- 그래서 지금처럼 하나의 애스펙트에 여러 어드바이스가 있으면, 순서를 보장받을 수 없게 된다.
+- 따라서 **애스펙트를 별도의 클래스로 분리**해야 한다.
+
+현재 로그를 남기는 순서가 doLog -> doTransaction 으로 실행된다.
+반대로 실행해보도록 해보자.
+
+```java
+@Slf4j
+public class AspectV5Order {
+
+    @Aspect
+    @Order(2)
+    public static class LogAspect {
+        @Around("hello.aop.order.aop.PointCuts.allOrder()")
+        public Object doLog(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[log] {}", joinPoint.getSignature()); // join point signature
+            return joinPoint.proceed(); // 실제 타깃이 호출
+        }
+    }
+
+    @Aspect
+    @Order(1)
+    public static class TxAspect {
+        // hello.aop.order 패키지와 하위 패키지 이면서, 동시에 클래스 이름 패턴이 *Service인 것
+        @Around("hello.aop.order.aop.PointCuts.orderAndService()")
+        public Object doTranscation(ProceedingJoinPoint joinPoint) throws Throwable {
+            try {
+                log.info("[트랜잭션 시작] {}", joinPoint.getSignature());
+                final Object result = joinPoint.proceed();
+                log.info("[트랜잭션 커밋] {}", joinPoint.getSignature());
+                return result;
+            } catch (Exception e) {
+                log.info("[트랜잭션 롤백] {}", joinPoint.getSignature());
+                throw e;
+            } finally {
+                log.info("[리소스 릴리즈] {}", joinPoint.getSignature());
+            }
+        }
+    }
+}
+```
+
+> 테스트
+
+```java
+@Slf4j
+@SpringBootTest
+@Import({ AspectV5Order.LogAspect.class, AspectV5Order.TxAspect.class })
+public class AopTest {
+
+    @Autowired
+    OrderService orderService;
+
+    @Autowired
+    OrderRepository orderRepository;
+
+    @Test
+    void aopInfo() {
+        log.info("isAopProxy, orderService={}", AopUtils.isAopProxy(orderService));
+        log.info("isAopProxy, orderRepository={}", AopUtils.isAopProxy(orderRepository));
+    }
+
+    @Test
+    void success() {
+        orderService.orderItem("itemA");
+    }
+
+    @Test
+    void exception() {
+        assertThatThrownBy(() -> orderService.orderItem("ex"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
+```
+
+> 실행 결과
+
+- aopInfo
+
+```log
+2022-05-11 03:07:26.550  INFO 37345 --- [    Test worker] hello.aop.AopTest                        : isAopProxy, orderService=true
+2022-05-11 03:07:26.550  INFO 37345 --- [    Test worker] hello.aop.AopTest                        : isAopProxy, orderRepository=true
+```
+
+- success
+
+```log
+2022-05-11 03:07:26.525  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [트랜잭션 시작] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.526  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [log] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.536  INFO 37345 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 03:07:26.536  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [log] String hello.aop.order.OrderRepository.save(String)
+2022-05-11 03:07:26.540  INFO 37345 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 03:07:26.541  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [트랜잭션 커밋] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.541  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [리소스 릴리즈] void hello.aop.order.OrderService.orderItem(String)
+```
+
+- exception
+
+```log
+2022-05-11 03:07:26.606  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [트랜잭션 시작] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.606  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [log] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.606  INFO 37345 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-11 03:07:26.606  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [log] String hello.aop.order.OrderRepository.save(String)
+2022-05-11 03:07:26.606  INFO 37345 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+2022-05-11 03:07:26.607  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [트랜잭션 롤백] void hello.aop.order.OrderService.orderItem(String)
+2022-05-11 03:07:26.607  INFO 37345 --- [    Test worker] hello.aop.order.aop.AspectV5Order        : [리소스 릴리즈] void hello.aop.order.OrderService.orderItem(String)
+```
+
+- `@Order`는 클래스 단위로 실행된다. 숫자가 낮을수록 우선순위가 높다.
+- 실행 순서는 Order가 낮을수록 먼저 시작되지만, 다시 되돌아 올때는 역순으로 실행된다(Order가 높은 순으로)
+
+![](/images/2022-05-11-03-10-13.png)
 
