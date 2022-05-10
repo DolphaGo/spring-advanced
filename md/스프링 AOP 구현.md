@@ -3,6 +3,7 @@
   - [스프링 AOP 구현1 - 시작](#스프링-aop-구현1---시작)
   - [스프링 AOP 구현2 - 포인트컷 분리](#스프링-aop-구현2---포인트컷-분리)
   - [스프링 AOP 구현3 - 어드바이스 추가](#스프링-aop-구현3---어드바이스-추가)
+  - [스프링 AOP 구현4 - 포인트컷 참조](#스프링-aop-구현4---포인트컷-참조)
 
 ---
 
@@ -349,6 +350,8 @@ public class AopTest {
 2022-05-11 02:44:19.281  INFO 32277 --- [    Test worker] hello.aop.order.aop.AspectV3             : [리소스 릴리즈] void hello.aop.order.OrderService.orderItem(String)
 ```
 
+> 동작 과정
+
 ![](/images/2022-05-11-02-50-33.png)
 
 - AOP 적용 전
@@ -370,3 +373,91 @@ OrderService엔 2개의 어드바이스(`doLog(), doTransaction()`), OrderReposi
 **만약 어드바이스가 적용되는 순서를 변경하고 싶으면 어떻게 하면 될까?** 예를 들어서 실행 시간을 측정해야 하는데 트랜잭션과 관련된 시간을 제외하고 측정하고 싶다면 `[ doTransaction() doLog() ]` 이렇게 트랜잭션 이후에 로그를 남겨야 할 것이다.
 
 그 전에 잠깐 포인트컷을 외부로 빼서 사용하는 방법을 먼저 알아보자.
+
+## 스프링 AOP 구현4 - 포인트컷 참조
+
+다음과 같이 포인트컷을 공용으로 사용하기 위해 별도의 외부 클래스에 모아두어도 된다.
+참고로, 외부에서 호출할 때는 포인트컷의 접근 제어자를 `public` 으로 열어두어야 한다.
+
+```java
+public class PointCuts {
+
+    // hello.aop.order 패키지와 하위 패키지
+    @Pointcut("execution(* hello.aop.order..*(..))")
+    public void allOrder() {} // 포인트컷 시그니처라고 합니다.
+
+    // 클래스 이름 패턴이 *Service 인 것(보통 트랜잭션은 비즈니스 로직 실행할 때 (서비스 계층) 실행하므로)
+    @Pointcut("execution(* *..*Service.*(..))")
+    public void allService() {}
+
+    // allOrder AND allService
+    @Pointcut("allOrder() && allService()")
+    public void orderAndService() {}
+}
+```
+
+```java
+@Slf4j
+@Aspect
+public class AspectV4PointCut {
+
+    @Around("hello.aop.order.aop.PointCuts.allOrder()")
+    public Object doLog(ProceedingJoinPoint joinPoint) throws Throwable {
+        log.info("[log] {}", joinPoint.getSignature()); // join point signature
+        return joinPoint.proceed(); // 실제 타깃이 호출
+    }
+
+    // hello.aop.order 패키지와 하위 패키지 이면서, 동시에 클래스 이름 패턴이 *Service인 것
+    @Around("hello.aop.order.aop.PointCuts.orderAndService()")
+    public Object doTranscation(ProceedingJoinPoint joinPoint) throws Throwable {
+        try {
+            log.info("[트랜잭션 시작] {}", joinPoint.getSignature());
+            final Object result = joinPoint.proceed();
+            log.info("[트랜잭션 커밋] {}", joinPoint.getSignature());
+            return result;
+        } catch (Exception e) {
+            log.info("[트랜잭션 롤백] {}", joinPoint.getSignature());
+            throw e;
+        } finally {
+            log.info("[리소스 릴리즈] {}", joinPoint.getSignature());
+        }
+    }
+}
+```
+
+> 테스트
+
+```java
+@Slf4j
+@SpringBootTest
+@Import(AspectV4PointCut.class)
+public class AopTest {
+
+    @Autowired
+    OrderService orderService;
+
+    @Autowired
+    OrderRepository orderRepository;
+
+    @Test
+    void aopInfo() {
+        log.info("isAopProxy, orderService={}", AopUtils.isAopProxy(orderService));
+        log.info("isAopProxy, orderRepository={}", AopUtils.isAopProxy(orderRepository));
+    }
+
+    @Test
+    void success() {
+        orderService.orderItem("itemA");
+    }
+
+    @Test
+    void exception() {
+        assertThatThrownBy(() -> orderService.orderItem("ex"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
+```
+
+- 실행 결과는 V3과 같다.
+
+
