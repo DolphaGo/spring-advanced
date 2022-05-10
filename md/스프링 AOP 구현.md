@@ -1,6 +1,7 @@
 - [스프링 AOP 구현](#스프링-aop-구현)
   - [예제 프로젝트 작성](#예제-프로젝트-작성)
   - [스프링 AOP 구현1 - 시작](#스프링-aop-구현1---시작)
+  - [스프링 AOP 구현2 - 포인트컷 분리](#스프링-aop-구현2---포인트컷-분리)
 
 ---
 
@@ -182,3 +183,41 @@ public class AopTest {
 - `@Import` 주로 설정 파일을 추가할 때 사용(`@Configuration`)
 
 `@Import`는 주로 설정 파일을 추가할 때 사용하지만, 이 기능으로 스프링 빈도 등록할 수 있다. 테스트에서는 버전을 올려가면서 변경할 예정이어서 간단하게 `@Import` 기능을 사용했다.
+
+
+## 스프링 AOP 구현2 - 포인트컷 분리
+
+`@Around`에 포인트컷 표현식을 직접 넣을 수 있지만, `@Pointcut` 애노테이션을 사용해서 별도로 분리할 수도 있다.
+
+```java
+@Slf4j
+@Aspect
+public class AspectV2 {
+
+    // hello.aop.order 패키지와 하위 패키지
+    @Pointcut("execution(* hello.aop.order..*(..))")
+    private void allOrder(){} // 포인트컷 시그니처라고 합니다.
+
+    @Around("allOrder()")
+    public Object doLog(ProceedingJoinPoint joinPoint) throws Throwable {
+        log.info("[log] {}", joinPoint.getSignature()); // join point signature
+        return joinPoint.proceed(); // 실제 타깃이 호출
+    }
+}
+```
+
+> Test
+
+`@Import(AspectV2.class)` 로 빈으로 등록하여 테스트하면 V1과 같은 결과가 출력된다.
+
+**`@Pointcut`**
+
+- `@Pointcut`에 포인트컷 표현식을 사용한다.
+- **메서드 이름과 파라미터를 합쳐서 포인트컷 시그니처(signature)라 한다.**
+- **메서드의 반환 타입은 `void` 여야 한다.**
+- **코드 내용은 비워둔다.**
+- 포인트컷 시그니처는 `allOrder()` 이다. 이름 그대로 주문과 관련된 모든 기능을 대상으로 하는 포인트컷이다.
+- `@Around` 어드바이스에서는 포인트컷을 직접 지정해도 되지만, 포인트컷 시그니처를 사용해도 된다. 여기서는 `@Around("allOrder()")` 를 사용한다.
+- `private`, `public` 같은 접근 제어자는 내부에서만 사용하면 private를 사용해도 되지만, 다른 애스펙트에서 참고하려면 public을 사용하자.
+
+결과적으로 `AspectV1`과 같은 기능을 수행한다. 이렇게 분리하면 하나의 포인트컷 표현식을 여러 어드바이스에서 함께 사용 가능하다.
