@@ -46,6 +46,87 @@ execution은 가장 많이 사용하고, 나머지는 자주 사용하지는 않
 
 ## 예제 만들기
 
+- ClassAop
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME) // 실행할 때까지 어노테이션이 살아있는 것
+public @interface ClassAop {
+}
+```
+
+- MethodAop
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME) // 참고로 Compile 같은 것을 하면, 실행시점엔 사라지게 됨
+public @interface MethodAop {
+    String value();
+}
+```
+
+- MemberService
+
+```java
+public interface MemberService {
+    String hello(String param);
+}
+```
+
+- MemberServiceImpl
+
+```java
+@ClassAop
+@Component // AOP를 쓰려면 스프링 빈으로 등록되어야 하므로, 자동 컴포넌트 스캔의 대상이 되도록 한다.
+public class MemberServiceImpl implements MemberService {
+
+    @Override
+    @MethodAop("test value")
+    public String hello(final String param) {
+        return "ok";
+    }
+
+    public String internal(String param) {
+        return "ok";
+    }
+}
+```
+
+> Test
+
+```java
+@Slf4j
+public class ExecutionTest {
+
+    AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+    Method helloMethod;
+
+    @BeforeEach
+    public void init() throws NoSuchMethodException {
+        helloMethod = MemberServiceImpl.class.getMethod("hello", String.class);
+    }
+
+    @Test
+    void printMethod() {
+        // helloMethod=public java.lang.String hello.aop.member.MemberServiceImpl.hello(java.lang.String)
+        log.info("helloMethod={}", helloMethod);
+    }
+}
+```
+
+- `AspectJExpressionPointcut`이 바로, 포인트컷 표현식을 처리해주는 클래스.
+- 여기에 포인트컷 표현식을 지정해주면 된다.
+- `AspectJExpressionPointcut`는 상위에 `Pointcut` 인터페이스를 가진다.
+![](/images/2022-05-12-03-20-15.png)
+- 위에서 출력한 printMethod() 테스트는, MemberServiceImpl을 reflection으로 가져와서 메서드의 정보를 출력해준다.
+- 여기에서 출력된 것에 주목해보자.
+
+```
+public java.lang.String hello.aop.member.MemberServiceImpl.hello(java.lang.String)
+```
+
+- 이번에 알아볼 `execution` 으로 시작하는 포인트컷 표현식은 이 메서드 정보를 매칭해서 포인트컷 대상을 찾아내는 것이다!
+
 ## excecution - 1
 
 ## excecution - 2
