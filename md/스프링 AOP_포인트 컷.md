@@ -206,7 +206,222 @@ void allMatch() {
 
 파라미터에서 `..` 은 파라미터의 타입과 파라미터 수가 상관없다는 뜻이다.
 `( 0..* )` 파라미터는 뒤에 자세히 정리하겠다.
+
+다음 테스트 코드를 확인해보자.
+
+> **패턴 매칭과 매키지 매칭**
+
+```java
+@Slf4j
+public class ExecutionTest {
+
+    AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+    Method helloMethod;
+
+    @BeforeEach
+    public void init() throws NoSuchMethodException {
+        helloMethod = MemberServiceImpl.class.getMethod("hello", String.class);
+    }
+
+    @Test
+    void printMethod() {
+        // helloMethod=public java.lang.String hello.aop.member.MemberServiceImpl.hello(java.lang.String)
+        log.info("helloMethod={}", helloMethod);
+    }
+
+    @DisplayName("가장 정확한 포인트 컷")
+    @Test
+    void exactMatch() {
+        // helloMethod=public java.lang.String hello.aop.member.MemberServiceImpl.hello(java.lang.String)
+        pointcut.setExpression("execution(public String hello.aop.member.MemberServiceImpl.hello(String))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("가장 많이 생략한 포인트 컷")
+    @Test
+    void allMatch() {
+        pointcut.setExpression("execution(* *(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("이름만 매치하는 포인트컷")
+    @Test
+    void nameMatch() {
+        pointcut.setExpression("execution(* hello(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("패턴 네임 매칭 포인트컷")
+    @Test
+    void patternMatch() {
+        pointcut.setExpression("execution(* hel*(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("패턴 네임 매칭 포인트컷")
+    @Test
+    void patternMatch2() {
+        pointcut.setExpression("execution(* *el*(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("패턴 네임 매칭 포인트컷 실패하는 경우")
+    @Test
+    void nameMatchFalse() {
+        pointcut.setExpression("execution(* nono(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isFalse();
+    }
+
+    @DisplayName("패키지 매칭 정확한 포인트컷")
+    @Test
+    void packageMatch() {
+        pointcut.setExpression("execution(* hello.aop.member.MemberServiceImpl.hello(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("패키지 매칭에서 생략 가능한 형태")
+    @Test
+    void packageMatch2() {
+        pointcut.setExpression("execution(* hello.aop.member.*.*(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("패키지 매칭이 실패하는 경우")
+    @Test
+    void packageMatch3() {
+        pointcut.setExpression("execution(* hello.aop.*.*(..))"); // member Package인지 지정하지 않았기 때문에 false가 나온다.
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isFalse();
+    }
+
+    @DisplayName("서브 패키지 매칭")
+    @Test
+    void packageMatchSubPackage1() {
+        pointcut.setExpression("execution(* hello.aop.member..*.*(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+
+    @DisplayName("서브 패키지 매칭")
+    @Test
+    void packageMatchSubPackage2() {
+        pointcut.setExpression("execution(* hello.aop..*.*(..))");
+        assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+    }
+}
+```
+
+- `hello.aop.member.*(1).*(2)`
+  - (1): 타입
+  - (2): 메서드 이름
+
+- 패키지에서 `.`과, `..`의 차이를 이해해야 한다.
+  - `.`: 정확하게 해당 위치의 패키지
+  - `..`: 해당 위치의 패키지와 그 하위 패키지도 포함
+
 ## excecution - 2
+
+> **타입 매칭**
+
+```java
+@Test
+void typeExactMatch() {
+    pointcut.setExpression("execution(* hello.aop.member.MemberServiceImpl.*(..))");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@Test
+void typeMatchSuperType() {
+    pointcut.setExpression("execution(* hello.aop.member.MemberService.*(..))"); // 인터페이스를 넣어도, 매치가 된다. (자식 타입에 있는 것에 대해 부모 타입으로 해도 성공함)
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+```
+
+- `typeExactMatch()` 는 타입 정보가 정확하게 일치하기 때문에 매칭된다.
+- `typeMatchSuperType()` 을 주의해서 보아야 한다.
+  - `execution`에서는 `MemberService` 처럼 부모 타입을 선언해도, 그 자식 타입은 매칭된다.
+  - 다형성에서 `부모타입 = 자식타입`이 할당 가능하다는 점을 떠올려보면 된다.
+
+> 하지만, 주의해야 할 점이 있다.
+
+- **타입 매칭은 부모 타입에 있는 메서드만 허용한다**
+  - `typeMatchInternal()` 의 경우 `MemberServiceImpl`를 표현식에 선언했기 때문에 그 안에 있는 internal(String) 
+
+```java
+@Test
+void typeMatchInternal() throws NoSuchMethodException {
+    pointcut.setExpression("execution(* hello.aop.member.MemberServiceImpl.*(..))");
+    final Method internalMethod = MemberServiceImpl.class.getMethod("internal", String.class);
+    assertThat(pointcut.matches(internalMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@Test
+void typeMatchNoSuperTypeMethodFalse() throws NoSuchMethodException {
+    pointcut.setExpression("execution(* hello.aop.member.MemberService.*(..))"); // 이 인터페이스에 매칭하는 걸 다 매칭시킬 것이다.
+    final Method internalMethod = MemberServiceImpl.class.getMethod("internal", String.class); // 자식 타입에 해당하는 다른 메서드들도 매칭시키게 할 것이냐?
+    assertThat(pointcut.matches(internalMethod, MemberServiceImpl.class)).isFalse(); // 아니다. 부모 타입에 선언한 메서드만 매칭이 된다. (인터페이스에 선언한 것만 매칭이 된다)
+}
+```
+
+- `typeMatchInternal()` 의 경우 `MemberServiceImpl`를 표현식에 선언했기 때문에 그 안에 있는 `internal(String)` 메서드도 매칭 대상이 된다.
+- `typeMatchNoSuperTypeMethodFalse()` 를 주의해서 보아야 한다.
+이 경우 표현식에 부모 타입인 `MemberService` 를 선언했다.
+- 그런데 자식 타입인 `MemberServiceImpl`의 `internal(String)` 메서드를 매칭하려 한다. 이 경우 매칭에 실패한다. `MemberService` 에는 `internal(String)` 메서드가 없다!
+- **부모 타입을 표현식에 선언한 경우 부모 타입에서 선언한 메서드가 자식 타입에 있어야 매칭에 성공**한다. 그래서 부모 타입에 있는 `hello(String)` 메서드는 매칭에 성공하지만, 부모 타입에 없는 `internal(String)` 는 매칭에 실패한다.
+
+> **파라미터 매칭**
+
+```java
+@DisplayName("String 타입의 파라미터 허용 (String)")
+@Test
+void argsMatch() {
+    pointcut.setExpression("execution(* *(String))");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@DisplayName("파라미터가 없어야함")
+@Test
+void noArgsMatch() {
+    pointcut.setExpression("execution(* *())");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isFalse();
+}
+
+@DisplayName("정확히 하나의 파라미터 허용, 모든 타입 허용")
+@Test
+void argsMatchStar() {
+    pointcut.setExpression("execution(* *(*))");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@DisplayName("개수와 무관하게 모든 파라미터, 모든 타입 허용")
+@Test
+void argsMatchAll() {
+    pointcut.setExpression("execution(* *(..))");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@DisplayName("String으로 시작하고, 이후는 개수와 타입 무관하게 허용, (String), (String, Xxx), (String Xxx, Xxx)")
+@Test
+void argsMatchComplex() {
+    pointcut.setExpression("execution(* *(String, ..))"); // 참고로 ..에는 파라미터가 없어도 됩니다.
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isTrue();
+}
+
+@DisplayName("String으로 시작하고, 이후는 개수는 지정되어 있고 타입은 상관 없음")
+@Test
+void argsMatchComplex2() {
+    pointcut.setExpression("execution(* *(String, *))");
+    assertThat(pointcut.matches(helloMethod, MemberServiceImpl.class)).isFalse();
+}
+```
+
+> **execution 파라미터 매칭 규칙은 다음과 같다.**
+
+- `(String)` : 정확하게 String 타입 파라미터
+- `()` : 파라미터가 없어야 한다.
+- `(*)` : 정확히 하나의 파라미터, 단 모든 타입을 허용한다.
+- `(*, *)` : 정확히 두 개의 파라미터, 단 모든 타입을 허용한다.
+- `(..)` : 숫자와 무관하게 모든 파라미터, 모든 타입을 허용한다. 참고로 파라미터가 없어도 된다. 0..* 로 이해하면 된다.
+- `(String, ..)` : String 타입으로 시작해야 한다. 숫자와 무관하게 모든 파라미터, 모든 타입을 허용한다.
+예) (String) , (String, Xxx) , (String, Xxx, Xxx) 허용
 
 ## within
 ## args
