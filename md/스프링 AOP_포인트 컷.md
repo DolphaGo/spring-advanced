@@ -1,8 +1,8 @@
 - [스프링 AOP - 포인트컷](#스프링-aop---포인트컷)
   - [포인트컷 지시자](#포인트컷-지시자)
   - [예제 만들기](#예제-만들기)
-  - [excecution - 1](#excecution---1)
-  - [excecution - 2](#excecution---2)
+  - [execution - 1](#execution---1)
+  - [execution - 2](#execution---2)
   - [within](#within)
   - [args](#args)
   - [@target, @within](#target-within)
@@ -127,7 +127,7 @@ public java.lang.String hello.aop.member.MemberServiceImpl.hello(java.lang.Strin
 
 - 이번에 알아볼 `execution` 으로 시작하는 포인트컷 표현식은 이 메서드 정보를 매칭해서 포인트컷 대상을 찾아내는 것이다!
 
-## excecution - 1
+## execution - 1
 
 ```
 execution(modifiers-pattern? ret-type-pattern declaring-type-pattern?name-pattern(param-pattern) throws-pattern?)
@@ -317,7 +317,7 @@ public class ExecutionTest {
   - `.`: 정확하게 해당 위치의 패키지
   - `..`: 해당 위치의 패키지와 그 하위 패키지도 포함
 
-## excecution - 2
+## execution - 2
 
 > **타입 매칭**
 
@@ -424,6 +424,17 @@ void argsMatchComplex2() {
 예) (String) , (String, Xxx) , (String, Xxx, Xxx) 허용
 
 ## within
+
+- within 지시자는 특정 타입 내의 조인 포인트에 대한 매칭을 제한한다.
+- 쉽게 이야기해서, **해당 타입이 매칭되면, 그 안의 메서드(조인 포인트)들이 자동으로 매칭된다.**
+- 문법은 단순한데, `execution` 에서 타입 부분만 사용한다고 생각하면 된다.
+
+> *주의*
+
+- 그런데 `within` 사용시 주의해야 할 점이 있다.
+- 표현식에 부모 타입을 지정하면 안된다는 점이다.
+- 정확하게 타입이 맞아야 한다. 이 부분에서 `execution`과 차이가 난다.
+
 ## args
 
 ## @target, @within
