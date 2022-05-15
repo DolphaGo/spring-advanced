@@ -700,8 +700,89 @@ static class AtTargetAtWithinAspect {
 
 ![](/images/2022-05-16-02-42-01.png)
 
-
 ## @annotation, @args
+
+**정의**
+
+`@annotation` : 메서드가 주어진 애노테이션을 가지고 있는 조인 포인트를 매칭
+
+- 다음과 같이 메서드(조인 포인트)에 애노테이션이 있으면 매칭한다.
+
+```java
+public class MemberServiceImpl {
+      @MethodAop("test value")
+      public String hello(String param) {
+          return "ok";
+      }
+}
+```
+
+> 테스트
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME) // 참고로 Compile 같은 것을 하면, 실행시점엔 사라지게 됨
+public @interface MethodAop {
+    String value();
+}
+```
+
+```java
+@ClassAop
+@Component // AOP를 쓰려면 스프링 빈으로 등록되어야 하므로, 자동 컴포넌트 스캔의 대상이 되도록 한다.
+public class MemberServiceImpl implements MemberService {
+
+    @Override
+    @MethodAop("test value")
+    public String hello(final String param) {
+        return "ok";
+    }
+
+    public String internal(String param) {
+        return "ok";
+    }
+}
+```
+
+```java
+@Import(AtAnnotationTest.AtAnnotationAspect.class)
+@Slf4j
+@SpringBootTest
+public class AtAnnotationTest {
+    @Autowired
+    MemberService memberService;
+
+    @Test
+    void success() {
+        log.info("memberService Proxy={}", memberService.getClass());
+        memberService.hello("helloA");
+    }
+
+    @Slf4j
+    @Aspect
+    static class AtAnnotationAspect {
+        @Around("@annotation(hello.aop.member.annotation.MethodAop)")
+        public Object ObjectDoAtAnnotation(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[@annotation] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+    }
+}
+```
+
+- 실행 결과
+
+```log
+2022-05-16 02:46:42.066  INFO 16106 --- [    Test worker] hello.aop.pointcut.AtAnnotationTest      : memberService Proxy=class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$145adb44
+2022-05-16 02:46:42.071  INFO 16106 --- [    Test worker] .a.p.AtAnnotationTest$AtAnnotationAspect : [@annotation] String hello.aop.member.MemberServiceImpl.hello(String)
+```
+
+**`@args`**
+
+- 전달된 실제 인수의 런타임 타입이 주어진 타입의 애노테이션을 갖는 조인 포인트 설명
+- 전달된 인수의 런타임 타입에 `@Check` 애노테이션이 있는 경우에 매칭한다.
+- `@args(test.Check)`
+- 잘 안씀.
 
 ## bean
 
