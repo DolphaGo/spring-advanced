@@ -786,6 +786,48 @@ public class AtAnnotationTest {
 
 ## bean
 
+- 스프링 전용 포인트컷 지시자, 빈의 이름으로 지정한다.
+- 스프링 빈의 이름으로 AOP 적용 여부를 지정한다. 이것은 스프리에서만 사용할 수 있는 특별한 지시자이다.(AspectJ 문법은 아님)
+- `bean(orderService) || bean(*Repository)`
+- `*` 와 같은 패턴을 사용할 수 있다.
+
+```java
+@Import(BeanTest.BeanAspect.class)
+@Slf4j
+@SpringBootTest
+public class BeanTest {
+
+    @Autowired
+    OrderService orderService;
+
+    @Test
+    void success() {
+        orderService.orderItem("itemA");
+    }
+
+    @Aspect
+    static class BeanAspect {
+
+        @Around("bean(orderService) || bean(*Repository)")
+        public Object doLog(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[bean] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+    }
+}
+```
+
+- 실행결과
+
+```log
+2022-05-22 23:46:19.674  INFO 84559 --- [    Test worker] hello.aop.pointcut.BeanTest              : [bean] String hello.aop.order.OrderService.orderItem(String)
+2022-05-22 23:46:19.685  INFO 84559 --- [    Test worker] hello.aop.order.OrderService             : [orderService] 실행
+2022-05-22 23:46:19.685  INFO 84559 --- [    Test worker] hello.aop.pointcut.BeanTest              : [bean] String hello.aop.order.OrderRepository.save(String)
+2022-05-22 23:46:19.690  INFO 84559 --- [    Test worker] hello.aop.order.OrderRepository          : [orderRepository] 실행
+```
+
+- `OrderService`, `*Repository(OrderRepository)` 의 메서드에 AOP가 적용된다.
+
 ## 매개변수 전달
 
 ## this, target
