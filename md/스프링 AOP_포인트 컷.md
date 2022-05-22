@@ -830,6 +830,162 @@ public class BeanTest {
 
 ## 매개변수 전달
 
+- 다음은 포인트컷 표현식을 사용해서 어드바이스에 매개변수를 전달할 수 있다.
+
+**`this, target, args, @target, @within, @annotation, @args`**
+
+다음과 같이 사용한다.
+
+```java
+@Before("allMember() && args(arg, ..)")
+public void logArgs3(String arg){
+    log.info("[logArgs3] arg={}", arg);
+}
+```
+
+- 포인트컷의 이름과 매개변수의 이름을 맞추어야 한다. 여기서는 `arg`로 맞추었다.
+- 추가로, 타입이 메서드에 지정한 타입으로 제한된다.
+- 여기서는 메서드 타입이 `String`으로 되어있기 때문에 다음과 같이 정의되는 것으로 이해하면 된다.
+  - `args(arg, ...) -> args(String, ..)`
+
+```java
+@Import(ParameterTest.ParameterAspect.class)
+@Slf4j
+@SpringBootTest
+public class ParameterTest {
+
+    @Autowired
+    MemberService memberService;
+
+    @Test
+    void success() {
+        log.info("memberService Proxy = {}", memberService.getClass());
+        memberService.hello("helloA");
+    }
+
+    @Slf4j
+    @Aspect
+    static class ParameterAspect {
+
+        @Pointcut("execution(* hello.aop.member..*.*(..))")
+        private void allMember() {}
+
+        // "가독성이 그렇게 좋지는 않다."
+        @Around("allMember()")
+        public Object logArgs1(ProceedingJoinPoint joinPoint) throws Throwable {
+            final Object arg1 = joinPoint.getArgs()[0];
+            log.info("[logArgs1] {}, arg={}", joinPoint.getSignature(), arg1);
+            return joinPoint.proceed();
+        }
+
+        @Around("allMember() && args(arg, ..)")
+        public Object logArgs2(ProceedingJoinPoint joinPoint, Object arg) throws Throwable {
+            log.info("[logArgs2] {}, arg={}", joinPoint.getSignature(), arg);
+            return joinPoint.proceed();
+        }
+
+        @Before("allMember() && args(arg, ..)")
+        public void logArgs3(String arg) {
+            log.info("[logArgs3] arg={}", arg);
+        }
+
+        // this : 스프링 컨테이너 안에 있는 것
+        @Before("allMember() && this(obj)")
+        public void thisArgs(JoinPoint joinPoint, MemberService obj) {
+            log.info("[this] {}, obj={}", joinPoint.getSignature(), obj.getClass());
+        }
+
+        // target은 호출하는 실제 대상(프록시를 호출하는 실제 대상을 원할 때는 target)
+        @Before("allMember() && target(obj)")
+        public void targetArgs(JoinPoint joinPoint, MemberService obj) {
+            log.info("[target] {}, obj={}", joinPoint.getSignature(), obj.getClass()); // 프록시 객체
+        }
+
+        @Before("allMember() && @target(annotation)")
+        public void atTarget(JoinPoint joinPoint, ClassAop annotation) {
+            log.info("[@target] {}, obj={}", joinPoint.getSignature(), annotation);
+        }
+
+        @Before("allMember() && @within(annotation)")
+        public void atWithin(JoinPoint joinPoint, ClassAop annotation) {
+            log.info("[@within] {}, obj={}", joinPoint.getSignature(), annotation);
+        }
+
+        @Before("allMember() && @annotation(annotation)")
+        public void atAnnotation(JoinPoint joinPoint, MethodAop annotation) {
+            log.info("[@annotation] {}, annotationValue={}", joinPoint.getSignature(), annotation.value());
+        }
+
+    }
+}
+```
+
+- 실행 결과
+
+```log
+2022-05-23 00:30:51.249  INFO 93098 --- [    Test worker] hello.aop.pointcut.ParameterTest         : memberService Proxy = class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$92941749
+2022-05-23 00:30:51.254  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [logArgs1] String hello.aop.member.MemberServiceImpl.hello(String), arg=helloA
+2022-05-23 00:30:51.255  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [logArgs2] String hello.aop.member.MemberServiceImpl.hello(String), arg=helloA
+2022-05-23 00:30:51.256  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [logArgs3] arg=helloA
+2022-05-23 00:30:51.256  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [this] String hello.aop.member.MemberServiceImpl.hello(String), obj=class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$92941749
+2022-05-23 00:30:51.256  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [target] String hello.aop.member.MemberServiceImpl.hello(String), obj=class hello.aop.member.MemberServiceImpl
+2022-05-23 00:30:51.255  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [@target] String hello.aop.member.MemberServiceImpl.hello(String), obj=@hello.aop.member.annotation.ClassAop()
+2022-05-23 00:30:51.256  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [@within] String hello.aop.member.MemberServiceImpl.hello(String), obj=@hello.aop.member.annotation.ClassAop()
+2022-05-23 00:30:51.255  INFO 93098 --- [    Test worker] h.a.p.ParameterTest$ParameterAspect      : [@annotation] String hello.aop.member.MemberServiceImpl.hello(String), annotationValue=test value
+```
+
+- `logArgs1` : `joinPoint.getArgs()[0]` 과 같이 매개변수를 전달 받는다.
+- `logArgs2` : `args(arg, ..)` 와 같이 매개변수를 전달 받는다.
+- `logArgs3` : `@Before` 를 사용한 축약버전이다. 추가로 타입을 `String`으로 제한했다.
+- `this`: **프록시 객체** 를 전달 받는다.
+- `target`: 실제 대상 객체를 전달 받는다.
+- `@target, @within` : 타입의 애노테이션을 전달 받는다.
+- `@annotation`: 메서드의 애노테이션을 전달 받는다.
+  - 여기서는 `annotation.value()`로 해당 애노테이션 값을 출력하는 모습을 확인할 수 있다.
+
+위의 실행 결과에 대해 이해를 돕고자, 기존에 적용되어 있던 애노테이션 클래스는 다음과 같다.
+
+> MemberService의 구체 클래스인 MemberServiceImpl은 다음과 같다.
+
+```java
+@ClassAop
+@Component // AOP를 쓰려면 스프링 빈으로 등록되어야 하므로, 자동 컴포넌트 스캔의 대상이 되도록 한다.
+public class MemberServiceImpl implements MemberService {
+
+    @Override
+    @MethodAop("test value")
+    public String hello(final String param) {
+        return "ok";
+    }
+
+    public String internal(String param) {
+        return "ok";
+    }
+}
+```
+
+그리고 어노테이션 정보는 다음과 같다.
+
+> ClassAop
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME) // 실행할 때까지 어노테이션이 살아있는 것
+public @interface ClassAop {
+}
+```
+
+> MethodAop
+
+```java
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME) // 참고로 Compile 같은 것을 하면, 실행시점엔 사라지게 됨
+public @interface MethodAop {
+    String value();
+}
+```
+
+
 ## this, target
 
 ## 정리
