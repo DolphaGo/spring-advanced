@@ -10,7 +10,6 @@
   - [bean](#bean)
   - [매개변수 전달](#매개변수-전달)
   - [this, target](#this-target)
-  - [정리](#정리)
 
 ---
 
@@ -172,11 +171,11 @@ public class ExecutionTest {
 
 > 매칭 조건
 
-- 접근제어자?: public
-- 반환타입: String
-- 선언타입?: hello.aop.member.MemberServiceImpl
-- 메서드이름: hello
-- 파라미터: (String)
+- 접근제어자?: `public`
+- 반환타입: `String`
+- 선언타입?: `hello.aop.member.MemberServiceImpl`
+- 메서드이름: `hello`
+- 파라미터: `(String)`
 - 예외?: 생략
 
 `MemberServiceImpl.hello(String)` 메서드와 포인트컷 표현식의 모든 내용이 정확하게 일치한다. 
@@ -195,11 +194,11 @@ void allMatch() {
 
 > 매칭 조건
 
-- 접근제어자?: 생략 
-- 반환타입: * 
-- 선언타입?: 생략 
-- 메서드이름: * 
-- 파라미터: (..)
+- 접근제어자?: 생략
+- 반환타입: `*`
+- 선언타입?: 생략
+- 메서드이름: `*`
+- 파라미터: `(..)`
 - 예외?: 없음
 
 `*` 은 아무 값이 들어와도 된다는 뜻이다.
@@ -425,7 +424,7 @@ void argsMatchComplex2() {
 
 ## within
 
-- within 지시자는 특정 타입 내의 조인 포인트에 대한 매칭을 제한한다.
+- `within` 지시자는 특정 타입 내의 조인 포인트에 대한 매칭을 제한한다.
 - 쉽게 이야기해서, **해당 타입이 매칭되면, 그 안의 메서드(조인 포인트)들이 자동으로 매칭된다.**
 - 문법은 단순한데, `execution` 에서 타입 부분만 사용한다고 생각하면 된다.
 
@@ -466,7 +465,7 @@ public class WithinTest {
 
 - 그런데 `within` 사용시 주의해야 할 점이 있다.
 - 표현식에 부모 타입을 지정하면 안된다는 점이다.
-- 정확하게 타입이 맞아야 한다. 이 부분에서 `execution`과 차이가 난다.
+- **정확하게 타입이 맞아야 한다.** 이 부분에서 `execution`과 차이가 난다.
 
 > WithinTest 주의할 점
 
@@ -486,8 +485,8 @@ void executionSuperTypeTrue() {
 }
 ```
 
-- 부모 타입(여기서는 MemberService 인터페이스) 지정시 within 은 실패하고, execution 은 성공하는 것을 확인할 수 있다.
-- within은 딱 하나만 지정할 수 있게 되어서, 잘 사용하지 않긴하다.
+- 부모 타입(여기서는 MemberService 인터페이스) 지정시 `within` 은 실패하고, `execution` 은 성공하는 것을 확인할 수 있다.
+- **within은 딱 하나만 지정**할 수 있게 되어서, 잘 사용하지 않긴하다.
 
 ## args
 
@@ -566,7 +565,7 @@ public class ArgsTest {
 
 **설명**
 
-- `@target` , `@within` 은 다음과 같이 타입에 있는 애노테이션으로 AOP 적용 여부를 판단한다. 
+- `@target` , `@within` 은 다음과 같이 타입에 있는 애노테이션으로 AOP 적용 여부를 판단한다.
 - `@target(hello.aop.member.annotation.ClassAop)`
 - `@within(hello.aop.member.annotation.ClassAop)`
 
@@ -786,7 +785,7 @@ public class AtAnnotationTest {
 
 ## bean
 
-- 스프링 전용 포인트컷 지시자, 빈의 이름으로 지정한다.
+- 스프링 전용 포인트컷 지시자, **빈의 이름으로 지정**한다.
 - 스프링 빈의 이름으로 AOP 적용 여부를 지정한다. 이것은 스프리에서만 사용할 수 있는 특별한 지시자이다.(AspectJ 문법은 아님)
 - `bean(orderService) || bean(*Repository)`
 - `*` 와 같은 패턴을 사용할 수 있다.
@@ -945,7 +944,7 @@ public class ParameterTest {
 
 위의 실행 결과에 대해 이해를 돕고자, 기존에 적용되어 있던 애노테이션 클래스는 다음과 같다.
 
-> MemberService의 구체 클래스인 MemberServiceImpl은 다음과 같다.
+> `MemberService`의 구체 클래스인 `MemberServiceImpl`은 다음과 같다.
 
 ```java
 @ClassAop
@@ -993,7 +992,7 @@ public @interface MethodAop {
 - `target`: Target 객체(스프링 AOP 프록시가 가르키는 실제 대상)를 대상으로 하는 조인 포인트
   - 스프링 빈에 등록되는 것은 아니지만, 객체의 실체(프록시가 가르키는 대상)
 
-> this, target 은 다음과 같이 적용 타입 하나를 정확하게 지정해야 한다.
+> this, target 은 다음과 같이 적용 **타입 하나를 정확하게 지정**해야 한다.
 
 ```java
 this(hello.aop.member.MemberService)
@@ -1005,25 +1004,25 @@ target(hello.aop.member.MemberService)
 
 > **this vs target**
 
-- 단순히 타입 하나를 정하면 되는데, this와 target은 어떤 차이가 있을까.
+- 단순히 타입 하나를 정하면 되는데, `this`와 `target`은 어떤 차이가 있을까.
 
-스프링에서 AOP를 적용하면, 실제 target 객체 대신에 프록시 객체가 스프링 빈으로 등록된다.
+스프링에서 AOP를 적용하면, 실제 `target` 객체 대신에 프록시 객체가 스프링 빈으로 등록된다.
 
-- this 는 스프링 빈으로 등록되어 있는 프록시 객체를 대상으로 포인트컷을 매칭한다.
-- target 은 실제 target 객체를 대상으로 포인트컷을 매칭한다.
+- `this` 는 스프링 빈으로 등록되어 있는 프록시 객체를 대상으로 포인트컷을 매칭한다.
+- `target` 은 실제 `target` 객체를 대상으로 포인트컷을 매칭한다.
 
 > **프록시 생성 방식에 따른 차이**
 
-- 스프링은 프록시를 생성할 때, JDK 동적 프록시와 CGLIB를 선택할 수 있따.
+- 스프링은 프록시를 생성할 때, `JDK 동적 프록시`와 `CGLIB`를 선택할 수 있따.
 - 둘의 프록시를 생성하는 방식이 다르기 때문에 차이가 발생한다.
-  - JDK 동적 프록시: 인터페이스가 필수이고, 인터페이스를 구현한 프록시 객체를 생성한다.
-  - CGLIB: 인터페이스가 있어도 구체 클래스를 상속받아서 프록시 객체를 생성한다.
+  - `JDK 동적 프록시`: 인터페이스가 필수이고, 인터페이스를 구현한 프록시 객체를 생성한다.
+  - `CGLIB`: 인터페이스가 있어도 구체 클래스를 상속받아서 프록시 객체를 생성한다.
 
 > **JDK 동적 프록시**
 
 ![](/images/2022-05-23-00-44-09.png)
 
-먼저 JDK 동적 프록시를 적용할 때 this, target을 보자.
+먼저 JDK 동적 프록시를 적용할 때 `this`, `target을` 보자.
 
 **MemberService 인터페이스 지정**
 
@@ -1042,8 +1041,8 @@ target(hello.aop.member.MemberService)
   - 따라서 `MemberServiceImpl` 를 전혀 알지 못하므로, **AOP 적용 대상이 안된다.**
 
 - `target(hello.aop.member.MemberServiceImpl)`
-  - target 객체를 보고 판단한다.
-  - target 객체가 `MemberServiceImpl` 타입이므로 AOP 적용 대상이다.
+  - `target` 객체를 보고 판단한다.
+  - `target` 객체가 `MemberServiceImpl` 타입이므로 AOP 적용 대상이다.
 
 > 테스트
 
@@ -1202,5 +1201,3 @@ public class ThisTargetTest {
 **프록시를 대상으로 하는 this 의 경우 구체 클래스를 지정하면 프록시 생성 전략에 따라서 다른 결과가 나올 수 있다는 점을 알아두자.**
 
 > *참고로, this , target 지시자는 단독으로 사용되기 보다는 파라미터 바인딩에서 주로 사용된다,*
-
-## 정리
