@@ -938,7 +938,7 @@ public class ParameterTest {
 - `logArgs2` : `args(arg, ..)` 와 같이 매개변수를 전달 받는다.
 - `logArgs3` : `@Before` 를 사용한 축약버전이다. 추가로 타입을 `String`으로 제한했다.
 - `this`: **프록시 객체** 를 전달 받는다.
-- `target`: 실제 대상 객체를 전달 받는다.
+- `target`: **실제 대상 객체**를 전달 받는다.
 - `@target, @within` : 타입의 애노테이션을 전달 받는다.
 - `@annotation`: 메서드의 애노테이션을 전달 받는다.
   - 여기서는 `annotation.value()`로 해당 애노테이션 값을 출력하는 모습을 확인할 수 있다.
@@ -987,5 +987,220 @@ public @interface MethodAop {
 
 
 ## this, target
+
+- `this`: 스프링 빈 객체(스프링 AOP 프록시)를 대상으로 하는 조인 포인트
+  - 프록시 자체가 스프링 빈으로 올라갔을 때
+- `target`: Target 객체(스프링 AOP 프록시가 가르키는 실제 대상)를 대상으로 하는 조인 포인트
+  - 스프링 빈에 등록되는 것은 아니지만, 객체의 실체(프록시가 가르키는 대상)
+
+> this, target 은 다음과 같이 적용 타입 하나를 정확하게 지정해야 한다.
+
+```java
+this(hello.aop.member.MemberService)
+target(hello.aop.member.MemberService)
+```
+
+- `*`와 같은 패턴을 사용할 수 **없다.**
+- 부모 타입을 허용한다.
+
+> **this vs target**
+
+- 단순히 타입 하나를 정하면 되는데, this와 target은 어떤 차이가 있을까.
+
+스프링에서 AOP를 적용하면, 실제 target 객체 대신에 프록시 객체가 스프링 빈으로 등록된다.
+
+- this 는 스프링 빈으로 등록되어 있는 프록시 객체를 대상으로 포인트컷을 매칭한다.
+- target 은 실제 target 객체를 대상으로 포인트컷을 매칭한다.
+
+> **프록시 생성 방식에 따른 차이**
+
+- 스프링은 프록시를 생성할 때, JDK 동적 프록시와 CGLIB를 선택할 수 있따.
+- 둘의 프록시를 생성하는 방식이 다르기 때문에 차이가 발생한다.
+  - JDK 동적 프록시: 인터페이스가 필수이고, 인터페이스를 구현한 프록시 객체를 생성한다.
+  - CGLIB: 인터페이스가 있어도 구체 클래스를 상속받아서 프록시 객체를 생성한다.
+
+> **JDK 동적 프록시**
+
+![](/images/2022-05-23-00-44-09.png)
+
+먼저 JDK 동적 프록시를 적용할 때 this, target을 보자.
+
+**MemberService 인터페이스 지정**
+
+- `this(hello.aop.member.MemberService)`
+  - 프록시 객체를 보고 판단한다.
+  - `this` 는 부모타입을 허용하기 때문에 AOP가 적용된다.
+- `target(hello.aop.member.MemberService)`
+  - `target` 객체를 보고 판단한다.
+  - `target` 은 부모 타입을 허용하기 때문에 AOP가 적용된다.
+
+**MemberServiceImpl 구체 클래스 지정**
+
+- `this(hello.aop.member.MemberServiceImpl)`
+  - 프록시 객체를 보고 판단한다.
+  - JDK 동적 프록시로 만들어진 proxy 객체는 `MemberService` 인터페이스 기반으로 구현된 새로운 클래스이다.
+  - 따라서 `MemberServiceImpl` 를 전혀 알지 못하므로, **AOP 적용 대상이 안된다.**
+
+- `target(hello.aop.member.MemberServiceImpl)`
+  - target 객체를 보고 판단한다.
+  - target 객체가 `MemberServiceImpl` 타입이므로 AOP 적용 대상이다.
+
+> 테스트
+
+```java
+@Import(ThisTargetTest.ThisTargetAspect.class)
+@Slf4j
+@SpringBootTest(properties = "spring.aop.proxy-target-class=false") // JDK 동적 프록시
+public class ThisTargetTest {
+
+    @Autowired
+    MemberService memberService;
+
+    @Test
+    void success() {
+        log.info("memberService Proxy={}", memberService.getClass());
+        memberService.hello("helloA");
+    }
+
+    @Slf4j
+    @Aspect
+    static class ThisTargetAspect { // this와 target은 부모타입 허용한다.
+
+        @Around("this(hello.aop.member.MemberService)")
+        public Object doThisInterface(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[this-interface] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("target(hello.aop.member.MemberService)")
+        public Object doTargetInterface(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[target-interface] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("this(hello.aop.member.MemberServiceImpl)")
+        public Object doThisConcrete(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[this-concrete] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("target(hello.aop.member.MemberServiceImpl)")
+        public Object doTargetConcrete(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[target-concrete] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+    }
+}
+```
+
+```log
+2022-05-23 01:00:18.942  INFO 99153 --- [    Test worker] hello.aop.pointcut.ThisTargetTest        : memberService Proxy=class com.sun.proxy.$Proxy52
+2022-05-23 01:00:18.954  INFO 99153 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [target-concrete] String hello.aop.member.MemberService.hello(String)
+2022-05-23 01:00:18.954  INFO 99153 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [target-interface] String hello.aop.member.MemberService.hello(String)
+2022-05-23 01:00:18.954  INFO 99153 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [this-interface] String hello.aop.member.MemberService.hello(String)
+```
+
+- **결과를 보면, JDK 동적 프록시로 생성이 되었고, this의 구체클래스로는 aop가 먹히지 않는 것을 확인할 수 있다.**
+
+> **CGLIB**
+
+![](/images/2022-05-23-00-43-58.png)
+
+**MemberService 인터페이스 지정**
+
+- `this(hello.aop.member.MemberService)` 
+  - proxy 객체를 보고 판단한다. 
+  - this 는 부모 타입을 허용하기 때문에 AOP가 적용된다.
+
+- `target(hello.aop.member.MemberService)` 
+  - target 객체를 보고 판단한다. 
+  - target 은 부모 타입을 허용하기 때문에 AOP가 적용된다.
+
+**MemberServiceImpl 구체 클래스 지정**
+
+- `this(hello.aop.member.MemberServiceImpl)`
+  - proxy 객체를 보고 판단한다.
+  - CGLIB로 만들어진 proxy 객체는 `MemberServiceImpl` 를 상속 받아서 만들었기 때문에 AOP가 적용된다.
+  - this 가 부모 타입을 허용하기 때문에 포인트컷의 대상이 된다.
+
+- `target(hello.aop.member.MemberServiceImpl)`
+  - target 객체를 보고 판단한다.
+  - target 객체가 `MemberServiceImpl` 타입이므로 AOP 적용 대상이다.
+
+> 테스트
+
+```java
+@Import(ThisTargetTest.ThisTargetAspect.class)
+@Slf4j
+@SpringBootTest(properties = "spring.aop.proxy-target-class=true") // CGLIB 프록시, default가 CGLIB
+public class ThisTargetTest {
+
+    @Autowired
+    MemberService memberService;
+
+    @Test
+    void success() {
+        log.info("memberService Proxy={}", memberService.getClass());
+        memberService.hello("helloA");
+    }
+
+    @Slf4j
+    @Aspect
+    static class ThisTargetAspect { // this와 target은 부모타입 허용한다.
+
+        @Around("this(hello.aop.member.MemberService)")
+        public Object doThisInterface(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[this-interface] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("target(hello.aop.member.MemberService)")
+        public Object doTargetInterface(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[target-interface] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("this(hello.aop.member.MemberServiceImpl)")
+        public Object doThisConcrete(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[this-concrete] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+
+        @Around("target(hello.aop.member.MemberServiceImpl)")
+        public Object doTargetConcrete(ProceedingJoinPoint joinPoint) throws Throwable {
+            log.info("[target-concrete] {}", joinPoint.getSignature());
+            return joinPoint.proceed();
+        }
+    }
+}
+```
+
+- 실행 결과
+
+```log
+05-23 02:24:39.880  INFO 14661 --- [    Test worker] hello.aop.pointcut.ThisTargetTest        : memberService Proxy=class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$b16ba34e
+2022-05-23 02:24:39.884  INFO 14661 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [target-concrete] String hello.aop.member.MemberServiceImpl.hello(String)
+2022-05-23 02:24:39.884  INFO 14661 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [target-interface] String hello.aop.member.MemberServiceImpl.hello(String)
+2022-05-23 02:24:39.884  INFO 14661 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [this-concrete] String hello.aop.member.MemberServiceImpl.hello(String)
+2022-05-23 02:24:39.884  INFO 14661 --- [    Test worker] h.a.p.ThisTargetTest$ThisTargetAspect    : [this-interface] String hello.aop.member.MemberServiceImpl.hello(String)
+```
+
+- 결과를 보면, CGLIB 프록시로 생성이 되고, JDK 동적프록시로 동작하지 않았던, this의 구체 클래스에도 AOP 적용이 된 것을 확인할 수 있다.
+
+**`properties = {"spring.aop.proxy-target-class=false"}`**
+
+- `application.properties` 에 설정하는 대신에 해당 테스트에서만 설정을 임시로 적용한다. 이렇게 하면 각 테스트마다 다른 설정을 손쉽게 적용할 수 있다.
+- `spring.aop.proxy-target-class=false`
+  - 스프링이 AOP 프록시를 생성할 때 JDK 동적 프록시를 우선 생성한다.
+  - 물론 인터페이스가 없다면 CGLIB를 사용한다.
+
+- `spring.aop.proxy-target-class=true`
+  - 스프링이 AOP 프록시를 생성할 때 CGLIB 프록시를 생성한다.
+  - 참고로 이 설정을 생략하면 스프링 부트에서 기본으로 CGLIB를 사용한다.
+
+
+**프록시를 대상으로 하는 this 의 경우 구체 클래스를 지정하면 프록시 생성 전략에 따라서 다른 결과가 나올 수 있다는 점을 알아두자.**
+
+> *참고로, this , target 지시자는 단독으로 사용되기 보다는 파라미터 바인딩에서 주로 사용된다,*
 
 ## 정리
