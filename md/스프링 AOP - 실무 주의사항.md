@@ -653,3 +653,74 @@ CGLIB를 사용하면 사실 이런 고민 자체를 하지 않아도 된다.
 JDK 동적 프록시는 대상 클래스 타입으로 주입할 때 문제가 있고, CGLIB는 대상 클래스에 기본 생성자 필수, 생성자 2번 호출 문제가 있다.
 
 ### 스프링의 해결책
+
+> **스프링의 기술 선택 변화**
+
+- **스프링 3.2, CGLIB를 스프링 내부에 함께 패키징**
+  - CGLIB를 사용하려면 CGLIB 라이브러리가 별도로 필요했다.
+  - 스프링은 CGLIB 라이브러리를 스프링 내부에 함께 패키징해서 별도의 라이브러리 추가 없이 CGLIB를 사용할 수 있게 되었다.
+  - CGLIB `spring-core org.springframework`
+
+- **CGLIB 기본 생성자 필수 문제 해결**
+  - 스프링 4.0부터 CGLIB의 기본 생성자가 필수인 문제가 해결되었다.
+  - `objenesis` 라는 특별한 라이브러리를 사용해서 **기본 생성자 없이 객체 생성이 가능**하다. 참고로 이 라이브러리는 생성자 호출 없이 객체를 생성할 수 있게 해준다.
+
+- **생성자 2번 호출 문제**
+  - 스프링 4.0부터 CGLIB의 생성자 2번 호출 문제가 해결되었다.
+  - 이것도 역시 `objenesis` 라는 특별한 라이브러리 덕분에 가능해졌다. **이제 생성자가 1번만 호출된다.**
+
+- **스프링 부트 2.0 - CGLIB 기본 사용**
+  - **스프링 부트 2.0 버전부터 CGLIB를 기본으로 사용**하도록 했다.
+  - 이렇게 해서 **구체 클래스 타입으로 의존관계를 주입하는 문제를 해결**했다.
+  - 스프링 부트는 별도의 설정이 없다면 AOP를 적용할 때 `기본적으로 proxyTargetClass=true`로 설정해서 사용한다.
+  - **따라서 인터페이스가 있어도 JDK 동적 프록시를 사용하는 것이 아니라 항상 CGLIB를 사용해서 구체클래스를 기반으로 프록시를 생성**한다.
+  - 물론 스프링은 우리에게 선택권을 열어주기 때문에 다음과 같이 `application.properties`에 설정하면 JDK 동적 프록시도 사용할 수 있다.
+    - `spring.aop.proxy-target-class=false`
+  
+> **정리**
+
+- 스프링은 최종적으로 스프링 부트 2.0에서 CGLIB를 기본으로 사용하도록 결정했다.
+- CGLIB를 사용하면 JDK 동적 프록시에서 동작하지 않는 구체 클래스 주입이 가능하다.
+- 여기에 추가로 CGLIB의 단점들이 이제는 많이 해결되었다.
+- CGLIB의 남은 문제라면 final 클래스나 final 메서드가 있는데, AOP를 적용할 대상에는 final 클래스나 final 메서드를 잘 사용하지는 않으므로 이 부분은 크게 문제가 되지는 않는다.
+- 개발자 입장에서 보면 사실 어떤 프록시 기술을 사용하든 상관이 없다.
+- JDK 동적 프록시든 CGLIB든 또는 어떤 새로운 프록시 기술을 사용해도 된다.
+- 심지어 클라이언트 입장에서 어떤 프록시 기술을 사용하는지 모르고 잘 동작하는 것이 가장 좋다.
+- 단지 문제 없고, 개발하기에 편리하면 되는 것이다.
+
+마지막으로 ProxyDITest 를 다음과 같이 변경해서 아무런 설정 없이 실행해보면 CGLIB가 기본으로 사용되는 것을 확인할 수 있다.
+
+```java
+@Slf4j
+@Import(ProxyDIAspect.class)
+@SpringBootTest
+//@SpringBootTest(properties = "spring.aop.proxy-target-class=true") // CGLIB 프록시, 성공
+//@SpringBootTest(properties = "spring.aop.proxy-target-class=false") // JDK 동적프록시, DI 예외 발생
+public class ProxyDITest {
+
+    @Autowired
+    MemberService memberService; // 인터페이스로 주입
+
+    @Autowired
+    MemberServiceImpl memberServiceImpl; // 구체 타입으로 주입
+
+    @Test
+    void go() {
+        log.info("memberService class = {}", memberService.getClass()); // CGLIB
+        memberService.hello("hello");
+        log.info("memberServiceImpl class = {}", memberServiceImpl.getClass());
+        memberServiceImpl.hello("hello");
+    }
+}
+```
+
+- 실행 결과
+
+```log
+2022-05-25 07:23:15.614  INFO 12379 --- [    Test worker] hello.aop.proxyvs.ProxyDITest            : memberService class = class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$ff6f04b8
+2022-05-25 07:23:15.617  INFO 12379 --- [    Test worker] hello.aop.proxyvs.code.ProxyDIAspect     : [proxyDIAdvice] String hello.aop.member.MemberServiceImpl.hello(String)
+2022-05-25 07:23:15.626  INFO 12379 --- [    Test worker] hello.aop.proxyvs.ProxyDITest            : memberServiceImpl class = class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$ff6f04b8
+2022-05-25 07:23:15.626  INFO 12379 --- [    Test worker] hello.aop.proxyvs.code.ProxyDIAspect     : [proxyDIAdvice] String hello.aop.member.MemberServiceImpl.hello(String)
+```
+
+- `application.properties` 에 `spring.aop.proxy-target-class` 관련 설정이 없어야 한다.
