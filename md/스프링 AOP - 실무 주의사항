@@ -479,6 +479,132 @@ void cglibProxy() {
 
 ### 타입 캐스팅
 
+- JDK 동적프록시로 의존관계 주입을 하면 문제가 발생할 수 있다.
+
+다음 코드로 알아보자.
+
+```java
+@Slf4j
+@Aspect
+public class ProxyDIAspect {
+
+    @Before("execution(* hello.aop..*.*(..))")
+    public void doTrace(JoinPoint joinPoint) {
+        log.info("[proxyDIAdvice] {}", joinPoint.getSignature());
+    }
+}
+```
+
+```java
+@Slf4j
+@Import(ProxyDIAspect.class)
+@SpringBootTest(properties = "spring.aop.proxy-target-class=false") // 스프링이 기본이 CGLIB로 동작하기 때문에 JDK 동적 프록시로 실행하도록 세팅
+public class ProxyDITest {
+
+    @Autowired
+    MemberService memberService; // 인터페이스로 주입
+
+//    @Autowired
+//    MemberServiceImpl memberServiceImpl; // 구체 타입으로 주입, 여기에서 에러가 터진다.
+
+    @Test
+    void go() {
+        log.info("memberService class = {}", memberService.getClass());
+        memberService.hello("hello");
+//        log.info("memberServiceImpl class = {}", memberServiceImpl.getClass());
+//        memberServiceImpl.hello("hello");
+    }
+}
+```
+
+- `@SpringBootTest` : 내부에 컴포넌트 스캔을 포함하고 있다.
+- `MemberServiceImpl` 에 `@Component` 가 붙어있으므로 스프링 빈 등록 대상이 된다.
+- `properties = {"spring.aop.proxy-target-class=false"}` : `application.properties` 에 설정하는 대신에 해당 테스트에서만 설정을 임시로 적용한다. 이렇게 하면 각 테스트마다 다른 설정을 손쉽게 적용할 수 있다.
+- `spring.aop.proxy-target-class=false` : 스프링이 AOP 프록시를 생성할 때 JDK 동적 프록시를 우선 생성한다. 물론 인터페이스가 없다면 CGLIB를 사용한다.
+- `@Import(ProxyDIAspect.class)` : 앞서 만든 Aspect를 스프링 빈으로 등록한다.
+
+- 실행 결과 및 분석
+
+```log
+2022-05-25 06:48:17.347  INFO 4386 --- [    Test worker] hello.aop.proxyvs.ProxyDITest            : memberService class = class com.sun.proxy.$Proxy54
+2022-05-25 06:48:17.350  INFO 4386 --- [    Test worker] hello.aop.proxyvs.code.ProxyDIAspect     : [proxyDIAdvice] String hello.aop.member.MemberService.hello(String)
+```
+
+- 그냥 MemberServiceImpl을 주입받으려고 하면 다음과 같은 타입 관련된 에러가 발생한다.
+
+```log
+BeanNotOfRequiredTypeException: Bean named 'memberServiceImpl' is expected to be of type 'hello.aop.member.MemberServiceImpl' but was actually of type 'com.sun.proxy.$Proxy54'
+```
+
+- 에러 로그를 읽어보면 `MemberServiceImpl`에 주입되길 기대하는 타입은 `hello.aop.member.MemberServiceImpl` 이지만, 실제 넘어온 타입은 `com.sun.proxy.$Proxy54` 라는 것이다. 따라서 타입 예외가 발생한다.
+
+![](/images/2022-05-25-06-53-14.png)
+
+- `@Autowired MemberService memberService` : 이 부분은 문제가 없다. JDK Proxy는 MemberService 인터페이스를 기반으로 만들어진다. 따라서 해당 타입(인터페이스)으로 캐스팅 할 수 있다.
+  - `MemberService = JDK Proxy` 가 성립한다.
+- `@Autowired MemberServiceImpl memberServiceImpl` : 문제는 여기다. JDK Proxy는 `MemberService` 인터페이스를 기반으로 만들어진다. 따라서 **MemberServiceImpl 타입이 뭔지 전혀 모른다.** 그래서 해당 타입에 주입할 수 없다.
+  - `MemberServiceImpl = JDK Proxy` 가 성립하지 않는다.
+
+
+이번엔 CGLIB로 실행해보자.
+
+```java
+@Slf4j
+@Import(ProxyDIAspect.class)
+@SpringBootTest(properties = "spring.aop.proxy-target-class=true") // CGLIB 프록시
+public class ProxyDITest {
+
+    @Autowired
+    MemberService memberService; // 인터페이스로 주입
+
+    @Autowired
+    MemberServiceImpl memberServiceImpl; // 구체 타입으로 주입
+
+    @Test
+    void go() {
+        log.info("memberService class = {}", memberService.getClass());
+        memberService.hello("hello");
+        log.info("memberServiceImpl class = {}", memberServiceImpl.getClass());
+        memberServiceImpl.hello("hello");
+    }
+}
+```
+
+- 실행 결과
+
+```log
+2022-05-25 06:55:07.753  INFO 5868 --- [    Test worker] hello.aop.proxyvs.ProxyDITest            : memberService class = class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$d8f00634
+2022-05-25 06:55:07.756  INFO 5868 --- [    Test worker] hello.aop.proxyvs.code.ProxyDIAspect     : [proxyDIAdvice] String hello.aop.member.MemberServiceImpl.hello(String)
+2022-05-25 06:55:07.764  INFO 5868 --- [    Test worker] hello.aop.proxyvs.ProxyDITest            : memberServiceImpl class = class hello.aop.member.MemberServiceImpl$$EnhancerBySpringCGLIB$$d8f00634
+2022-05-25 06:55:07.764  INFO 5868 --- [    Test worker] hello.aop.proxyvs.code.ProxyDIAspect     : [proxyDIAdvice] String hello.aop.member.MemberServiceImpl.hello(String)
+```
+
+![](/images/2022-05-25-06-56-07.png)
+
+- `@Autowired MemberService memberService` : CGLIB Proxy는 `MemberServiceImpl` 구체 클래스를 기반으로 만들어진다.
+- `MemberServiceImpl` 은 `MemberService` 인터페이스를 구현했기 때문에 해당 타입으로 캐스팅 할 수 있다.
+  - `MemberService = CGLIB Proxy` 가 성립한다.
+- `@Autowired MemberServiceImpl memberServiceImpl` : `CGLIB Proxy`는 `MemberServiceImpl` 구체 클래스를 기반으로 만들어진다. 따라서 해당 타입으로 캐스팅 할 수 있다.
+  - `MemberServiceImpl = CGLIB Proxy` 가 성립한다.
+
+
+> **정리**
+
+- JDK 동적 프록시는 대상 객체인 `MemberServiceImpl` 타입에 의존관계를 주입할 수 없다.
+- CGLIB 프록시는 대상 객체인 `MemberServiceImpl` 타입에 의존관계 주입을 할 수 있다.
+
+지금까지 JDK 동적 프록시가 가지는 한계점을 알아보았다. 실제로 개발할 때는 인터페이스가 있으면 인터페이스를 기반으로 의존관계 주입을 받는 것이 맞다.
+
+여기서 잠깐, DI의 장점이 무엇인가?
+
+- **DI 받는 클라이언트 코드의 변경 없이 구현 클래스를 변경할 수 있는 것**이다. 
+
+이렇게 하려면 인터페이스를 기반으로 의존관계를 주입 받아야 한다. MemberServiceImpl 타입으로 의존관계 주입을 받는 것 처럼 구현 클래스에 의존관계를 주입하면 향후 구현 클래스를 변경할 때 의존관계 주입을 받는 클라이언트의 코드도 함께 변경해야 한다.
+따라서 올바르게 잘 설계된 애플리케이션이라면 이런 문제가 자주 발생하지는 않는다.
+그럼에도 불구하고 테스트, 또는 여러가지 이유로 AOP 프록시가 적용된 구체 클래스를 직접 의존관계 주입 받아야 하는 경우가 있을 수 있다. 이때는 CGLIB를 통해 구체 클래스 기반으로 AOP 프록시를 적용하면 된다.
+여기까지 듣고보면 CGLIB를 사용하는 것이 좋아보인다. CGLIB를 사용하면 사실 이런 고민 자체를 하지 않아도 된다. 다음 시간에는 CGLIB의 단점을 알아보자.
+
+
 ### 의존 관계 주입
 
 ### CGLIB
